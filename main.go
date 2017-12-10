@@ -7,7 +7,7 @@ import (
   "sync"
   "github.com/likexian/whois-go"
   "github.com/likexian/whois-parser-go"
- "github.com/fatih/color"
+  "github.com/fatih/color"
 )
 
 const (
@@ -37,10 +37,10 @@ func main() {
     } else {
       hasPrintedState = true
     }
+
     for _, tld := range tlds {
       name := input + "." + tld
       line := name + ": "
-
       value, _ := state.Load(tld)
       switch value {
       case available: line += color.GreenString("Available")
@@ -53,32 +53,34 @@ func main() {
   var wg sync.WaitGroup
   wg.Add(len(tlds) * 2)
 
-  for _, tld := range tlds {
-      name := input + "." + tld
+  for i := range tlds {
+    tld := tlds[i]
+    name := input + "." + tld
 
-      go func(tld string){
-        defer wg.Done()
-        _, err := net.LookupHost(name)
-        if err == nil {
+    go func() {
+      defer wg.Done()
+      _, err := net.LookupHost(name)
+      if err == nil {
+        state.Store(tld, unavailable)
+        printState()
+      }
+    }()
+
+    go func() {
+      defer wg.Done()
+      rawResult, _ := whois.Whois(name)
+      result, err := whois_parser.Parser(rawResult)
+      if err == nil {
+        if result.Registrar.DomainStatus != "" {
           state.Store(tld, unavailable)
           printState()
+        } else {
+          state.Store(tld, available)
+          printState()
         }
-      }(tld)
-
-      go func(tld string) {
-        defer wg.Done()
-        rawResult, _ := whois.Whois(name)
-        result, err := whois_parser.Parser(rawResult)
-        if err == nil {
-          if result.Registrar.DomainStatus != "" {
-            state.Store(tld, unavailable)
-            printState()
-          } else {
-            state.Store(tld, available)
-            printState()
-          }
-        }
-      }(tld)
+      }
+    }()
   }
+
   wg.Wait()
 }
